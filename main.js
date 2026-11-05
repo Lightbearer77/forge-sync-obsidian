@@ -272,6 +272,7 @@ class ForgeSyncPlugin extends Plugin {
   indexForge(json) {
     const byId = new Map();
     const kindById = new Map();
+    const tombstones = new Set(); // ids deleted in Forge
     const sources = [
       ['task', json.tasks],
       ['milestone', json.milestones],
@@ -280,12 +281,18 @@ class ForgeSyncPlugin extends Plugin {
     for (const [kind, collection] of sources) {
       if (!Array.isArray(collection)) continue;
       for (const rec of collection) {
-        if (!rec || !rec.id || rec.deleted) continue;
+        if (!rec || !rec.id) continue;
+        if (rec.deleted) {
+          tombstones.add(String(rec.id));
+          continue;
+        }
         byId.set(String(rec.id), rec);
         kindById.set(String(rec.id), kind);
       }
     }
-    return { byId, kindById };
+    // A live record always wins over a tombstone with the same id.
+    for (const id of byId.keys()) tombstones.delete(id);
+    return { byId, kindById, tombstones };
   }
 
   /* ── Vault scan ── */
@@ -339,6 +346,7 @@ class ForgeSyncPlugin extends Plugin {
 
   buildPlan(hits, index, now = new Date()) {
     const { byId: forgeById, kindById } = index;
+    const tombstones = index.tombstones || new Set();
     const counts = new Map();
     const metaCounts = new Map(); // duplicates that matter for metadata: within the metadata files only
     for (const h of hits) {
@@ -354,6 +362,7 @@ class ForgeSyncPlugin extends Plugin {
       conflicts: [],
       vaultAhead: [],
       unmatched: [],
+      deletedOpen: [],
       missing: { tasks: [], milestones: [] },
       alreadyInSync: 0,
     };
@@ -362,7 +371,13 @@ class ForgeSyncPlugin extends Plugin {
       const rec = forgeById.get(h.id);
 
       if (!rec) {
-        plan.unmatched.push(h);
+        if (tombstones.has(h.id)) {
+          // Deleted in Forge. A cancelled/done line is consistent; an open one needs a look.
+          if (h.state === 'open') plan.deletedOpen.push(h);
+          else plan.alreadyInSync++;
+        } else {
+          plan.unmatched.push(h);
+        }
         continue;
       }
 
@@ -609,6 +624,8 @@ class ForgeReportModal extends Modal {
       plan.vaultAhead,
       label
     );
+
+    section('Deleted in Forge, still open here — cancel or delete the line', plan.deletedOpen, label);
 
     section('No matching Forge record', plan.unmatched, label);
 

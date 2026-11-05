@@ -9,6 +9,7 @@ Obsidian plugin: pulls task state from `forge-sync.json` (The Forge) and applies
   - Milestones: name, `` `due:: D` (@D) ``, `#MSnn #MSWnn`, `#Gn`. `#Ln` is never touched.
   - Unmanaged text (🆔, notes, `*(annotations)*`, other tags) stays as-is. Done (`[x]`) lines are never rewritten.
 - **Missing lines**: Forge tasks/milestones from the current Greek month onward with no line in the metadata files are listed with paste-ready lines and a Copy button. The plugin never inserts, moves or deletes lines.
+- **Deleted in Forge**: a vault line whose Forge record was deleted is fine if it is cancelled or done; if it is still open it is listed as "Deleted in Forge, still open here". True orphans (no Forge record at all) are listed as "No matching Forge record".
 - **Skipped and reported**: same ID on several lines (within the metadata files), more than one `🆔` on a line, inline `[completion::]`, done-here/open-in-Forge, no matching Forge record.
 
 Preview mode is on by default — nothing is written until you turn it off in settings. A line that changed between scan and write is skipped, never overwritten.

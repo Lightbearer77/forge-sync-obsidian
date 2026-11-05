@@ -165,11 +165,11 @@ const hit = (path, lineNo, line) => {
   const idm = /🆔\s*([A-Za-z0-9_\-]+)/.exec(m[4]);
   return { file: { path, basename: path.split('/').pop() }, lineNo, id: idm[1], marker: m[2], state: m[2] === '-' ? 'cancelled' : m[2] === ' ' ? 'open' : 'done', idCount: (m[4].match(/🆔/g) || []).length, line, text: m[4] };
 };
-const idx = (tasks, milestones = []) => {
-  const byId = new Map(), kindById = new Map();
+const idx = (tasks, milestones = [], deleted = []) => {
+  const byId = new Map(), kindById = new Map(), tombstones = new Set(deleted);
   tasks.forEach((r) => { byId.set(r.id, r); kindById.set(r.id, 'task'); });
   milestones.forEach((r) => { byId.set(r.id, r); kindById.set(r.id, 'milestone'); });
-  return { byId, kindById };
+  return { byId, kindById, tombstones };
 };
 const MPL = 'Tasks/Master Priority List.md';
 
@@ -240,6 +240,25 @@ t('plan: missing only counts ids present in metadata files', () => {
 });
 
 /* ── apply ── */
+t('plan: deleted in Forge — cancelled/done lines are in sync, open lines are flagged, true orphans stay unmatched', () => {
+  const p = mkPlugin();
+  const hits = [
+    hit(MPL, 1, '- [-] Gone and cancelled #Low #G3 🆔 d1 ❌ 2026-11-01'),
+    hit(MPL, 2, '- [x] Gone and done #Low #G3 🆔 d2 ✅ 2026-08-01'),
+    hit(MPL, 3, '- [ ] Gone but still open #Low #G3 🆔 d3'),
+    hit(MPL, 4, '- [ ] Never existed in Forge #Low #G3 🆔 zz'),
+  ];
+  const plan = p.buildPlan(hits, idx([], [], ['d1', 'd2', 'd3']), new Date(2026, 10, 5));
+  same(plan.alreadyInSync, 2); same(plan.deletedOpen.length, 1); same(plan.deletedOpen[0].id, 'd3');
+  same(plan.unmatched.length, 1); same(plan.unmatched[0].id, 'zz');
+});
+t('indexForge: tombstones collected; a live record beats a tombstone with the same id', () => {
+  const p = mkPlugin();
+  const ix = p.indexForge({ tasks: [{ id: 'a', deleted: true }, { id: 'b', name: 'B' }, { id: 'b', deleted: true }], milestones: [{ id: 'm', deleted: true }], runes: [] });
+  assert.ok(ix.tombstones.has('a') && ix.tombstones.has('m') && !ix.tombstones.has('b'));
+  same(ix.byId.size, 1);
+});
+
 t('apply: writes planned lines, skips stale ones', async () => {
   const p = mkPlugin();
   const file = { path: MPL, basename: 'Master Priority List.md' };
