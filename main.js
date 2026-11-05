@@ -37,6 +37,8 @@ const { Plugin, PluginSettingTab, Setting, Notice, Modal, requestUrl } = require
        not un-check anything.
    ───────────────────────────────────────────────────────────── */
 
+const SETTINGS_VERSION = 2;
+
 const DEFAULT_SETTINGS = {
   syncUrl: 'https://raw.githubusercontent.com/Lightbearer77/Forge/main/forge-sync.json',
   excludeFolders: 'Archive, Templates, .trash',
@@ -44,6 +46,7 @@ const DEFAULT_SETTINGS = {
   syncMetadata: true,
   syncNames: true,
   metadataFiles: 'Tasks/Master Priority List, Tasks/Master Milestones',
+  settingsVersion: SETTINGS_VERSION,
 };
 
 const TASK_LINE = /^(\s*(?:[-*+])\s+\[)([ xX\-])(\]\s*)(.*)$/;
@@ -217,7 +220,15 @@ function formatMilestoneLine(rec) {
 
 class ForgeSyncPlugin extends Plugin {
   async onload() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const saved = (await this.loadData()) || {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    // v0.2 rewrites far more than completions. Anyone upgrading from an older
+    // saved config gets Preview mode forced back on once, so the first run is a report.
+    if ((saved.settingsVersion || 1) < SETTINGS_VERSION) {
+      this.settings.dryRun = true;
+      this.settings.settingsVersion = SETTINGS_VERSION;
+      await this.saveSettings();
+    }
 
     this.addRibbonIcon('hammer', 'Pull from Forge', () => this.run());
 

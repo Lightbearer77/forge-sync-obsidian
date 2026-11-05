@@ -257,4 +257,13 @@ t('apply: writes planned lines, skips stale ones', async () => {
   same(data.split('\n')[1], '- [ ] A NEW 🆔 a'); same(data.split('\n')[2], '- [ ] B 🆔 b');
 });
 
+t('upgrade from an older saved config forces Preview back on, once', async () => {
+  const saves = [];
+  const mk = (saved) => { const p = new P(); p.loadData = async () => saved; p.saveData = async (d) => saves.push(d); p.addRibbonIcon = () => {}; p.addCommand = () => {}; p.addSettingTab = () => {}; p.app = {}; return p; };
+  const old = mk({ dryRun: false, syncUrl: 'u' }); await old.onload();
+  same(old.settings.dryRun, true); same(old.settings.syncUrl, 'u'); same(old.settings.settingsVersion, 2); same(saves.length, 1);
+  const cur = mk({ dryRun: false, settingsVersion: 2 }); await cur.onload();
+  same(cur.settings.dryRun, false); same(saves.length, 1);
+});
+
 setImmediate(() => console.log(`${passed} passed${process.exitCode ? ', FAILURES above' : ', 0 failed'}`));
